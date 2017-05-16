@@ -56,6 +56,16 @@ protected:
         static QState Stopped(Traffic * const me, QEvt const * const e);
         static QState Started(Traffic * const me, QEvt const * const e);
         // Add new states here...
+            static QState NSGo(Traffic * const me, QEvt const * const e);
+                static QState NSMinTimeWait(Traffic * const me, QEvt const * const e);
+                static QState NSMinTimeExceeded(Traffic * const me, QEvt const * const e);
+            static QState EWGo(Traffic * const me, QEvt const * const e);
+                static QState EWMinTimeWait(Traffic * const me, QEvt const * const e);
+                static QState EWMinTimeExceeded(Traffic * const me, QEvt const * const e);
+            static QState NSSlow(Traffic * const me, QEvt const * const e);
+            static QState EWSlow(Traffic * const me, QEvt const * const e);
+
+                
          
     void PrintUsage();
     
@@ -68,6 +78,7 @@ protected:
     Lamp m_lampNS;
     Lamp m_lampEW;
 
+    bool m_carWaiting;
     QTimeEvt m_waitTimer;       // Timer used to wait for minimum duration in NSGo or EWGo states.
 };
 

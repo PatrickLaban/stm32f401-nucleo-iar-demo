@@ -77,15 +77,11 @@ QState Traffic::Root(Traffic * const me, QEvt const * const e) {
         case Q_ENTRY_SIG: {
             LOG_EVENT(e);
             status = Q_HANDLED();
-            // Test only. Start 1000ms (1s) timer. Please remove.
-            //me->m_waitTimer.armX(1000);
             status = Q_HANDLED();
             break;
         }
         case Q_EXIT_SIG: {
             LOG_EVENT(e);
-            // Test only. Stop timer. Please remove.
-            //me->m_waitTimer.disarm();
             status = Q_HANDLED();
             break;
         }
@@ -102,14 +98,6 @@ QState Traffic::Root(Traffic * const me, QEvt const * const e) {
             status = Q_HANDLED();
             break;
         }  
-        // Test only. Showing how to handle a timeout event. Please remove.
-        /*
-        case TRAFFIC_WAIT_TIMER: {
-            LOG_EVENT(e);
-            status = Q_HANDLED();
-            break;
-        }
-        */
         case UART_IN_CHAR_IND: {
             UartInCharInd const &ind = static_cast<UartInCharInd const &>(*e);
             char ch = ind.GetChar();
@@ -195,12 +183,10 @@ QState Traffic::Started(Traffic * const me, QEvt const * const e) {
             status = Q_HANDLED();
             break;
         }
-        /*
         case Q_INIT_SIG: {
             status = Q_TRAN(&Traffic::NSGo);
             break;
         }
-        */
         case TRAFFIC_STOP_REQ: {
             LOG_EVENT(e);
             Evt const &req = EVT_CAST(*e);
@@ -209,28 +195,6 @@ QState Traffic::Started(Traffic * const me, QEvt const * const e) {
             status = Q_TRAN(&Traffic::Stopped);
             break;
         }
-        
-        // Test only - please remove.
-        case TRAFFIC_CAR_NS_REQ: {
-            LOG_EVENT(e);
-            DEBUG("If you see this message, you have not implemented this event yet.");
-            // Test posting to orthogonal region.
-            Evt *evt = new LampRedReq(LAMP_NS);
-            me->postLIFO(evt);
-            status = Q_HANDLED();
-            break;
-        }
-        // Test only - please remove.
-        case TRAFFIC_CAR_EW_REQ: {
-            LOG_EVENT(e);
-            DEBUG("If you see this message, you have not implemented this event yet.");
-            // Test posting to orthogonal region.
-            Evt *evt = new LampGreenReq(LAMP_EW);
-            me->postLIFO(evt);
-            status = Q_HANDLED();
-            break;
-        }
-        
         // Dispatch events to orthogonal regions.
         case LAMP_RED_REQ:
         case LAMP_YELLOW_REQ:
@@ -254,8 +218,76 @@ QState Traffic::Started(Traffic * const me, QEvt const * const e) {
     return status;
 }
 
-/*
-QState Traffic::MyState(Traffic * const me, QEvt const * const e) {
+QState Traffic::NSGo(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            Evt *evt1 = new LampGreenReq(LAMP_NS);
+            Evt *evt2 = new LampRedReq(LAMP_EW);
+            me->postLIFO(evt1);
+            me->postLIFO(evt2);
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_CAR_EW_REQ: {
+            LOG_EVENT(e);
+            status = Q_TRAN(&Traffic::NSSlow);
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::Started);
+            break;
+        }
+    }
+    return status;
+}
+
+QState Traffic::NSMinTimeWait(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            me->m_carWaiting = false;
+            me->m_waitTimer.armX(20000); // 20s timer
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            if (me->m_carWaiting) {
+                Evt *evt = new Evt(TRAFFIC_CAR_EW_REQ);
+                me->postLIFO(evt);
+                me->m_waitTimer.disarm();
+            }
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_CAR_EW_REQ: {
+            LOG_EVENT(e);
+            me->m_carWaiting = true;
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_WAIT_TIMER: {
+            LOG_EVENT(e);
+            status = Q_TRAN(&Traffic::NSMinTimeExceeded);
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::NSGo);
+            break;
+        }
+    }
+    return status;
+}
+
+QState Traffic::NSMinTimeExceeded(Traffic * const me, QEvt const * const e) {
     QState status;
     switch (e->sig) {
         case Q_ENTRY_SIG: {
@@ -268,18 +300,167 @@ QState Traffic::MyState(Traffic * const me, QEvt const * const e) {
             status = Q_HANDLED();
             break;
         }
-        case Q_INIT_SIG: {
-            LOG_EVENT(e);
-            status = Q_TRAN(&Traffic::SubState);
-            break;
-        }
         default: {
-            status = Q_SUPER(&Traffic::SuperState);
+            status = Q_SUPER(&Traffic::NSGo);
             break;
         }
     }
     return status;
 }
-*/
+
+
+QState Traffic::EWGo(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            Evt *evt1 = new LampGreenReq(LAMP_EW);
+            Evt *evt2 = new LampRedReq(LAMP_NS);
+            me->postLIFO(evt1);
+            me->postLIFO(evt2);
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_CAR_NS_REQ: {
+            LOG_EVENT(e);
+            status = Q_TRAN(&Traffic::EWSlow);
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::Started);
+            break;
+        }
+    }
+    return status;
+}
+
+QState Traffic::EWMinTimeWait(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            me->m_carWaiting = false;
+            me->m_waitTimer.armX(10000); // 10s timer
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            if (me->m_carWaiting) {
+                Evt *evt = new Evt(TRAFFIC_CAR_NS_REQ);
+                me->postLIFO(evt);
+                me->m_waitTimer.disarm();
+            }
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_CAR_NS_REQ: {
+            LOG_EVENT(e);
+            me->m_carWaiting = true;
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_WAIT_TIMER: {
+            LOG_EVENT(e);
+            status = Q_TRAN(&Traffic::EWMinTimeExceeded);
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::EWGo);
+            break;
+        }
+    }
+    return status;
+}
+
+QState Traffic::EWMinTimeExceeded(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            status = Q_HANDLED();
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::EWGo);
+            break;
+        }
+    }
+    return status;
+}
+
+QState Traffic::NSSlow(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            Evt *evt = new LampYellowReq(LAMP_NS);
+            me->postLIFO(evt);
+            me->m_waitTimer.armX(3000); // 3s timer
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            Evt *evt = new LampRedReq(LAMP_NS);
+            me->postLIFO(evt);
+            me->m_waitTimer.disarm();
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_WAIT_TIMER: {
+            LOG_EVENT(e);
+            status = Q_TRAN(&Traffic::EWGo);
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::Started);
+            break;
+        }
+    }
+    return status;
+}
+
+QState Traffic::EWSlow(Traffic * const me, QEvt const * const e) {
+    QState status;
+    switch (e->sig) {
+        case Q_ENTRY_SIG: {
+            LOG_EVENT(e);
+            Evt *evt = new LampYellowReq(LAMP_EW);
+            me->postLIFO(evt);
+            me->m_waitTimer.armX(3000); // 3s timer
+            status = Q_HANDLED();
+            break;
+        }
+        case Q_EXIT_SIG: {
+            LOG_EVENT(e);
+            Evt *evt = new LampRedReq(LAMP_EW);
+            me->postLIFO(evt);
+            me->m_waitTimer.disarm();
+            status = Q_HANDLED();
+            break;
+        }
+        case TRAFFIC_WAIT_TIMER: {
+            LOG_EVENT(e);
+            status = Q_TRAN(&Traffic::NSGo);
+            break;
+        }
+        default: {
+            status = Q_SUPER(&Traffic::Started);
+            break;
+        }
+    }
+    return status;
+}
 
 } // namespace APP
